@@ -8,6 +8,7 @@ from datetime import datetime
 
 today = datetime.now()
 ym = today.strftime("%Y-%m")
+day = today.strftime("%d")
 
 def zip_folder(folder_path, output_zip):
     folder = Path(folder_path)
@@ -100,25 +101,28 @@ parser.add_argument("--list", "-l", action="store_true")
 args = parser.parse_args()
 
 if args.commit:
+    localtime = time.localtime(time.time())
+    timestamp = f"{localtime.tm_hour}:{localtime.tm_min}"
     print(f"Commit message: {args.commit}")
-    commitf = commitsfolder / f"{ym}"
+    commitf = commitsfolder / f"{ym}/{day}"
 
     if not commitf.exists():
         commitf.mkdir()
 
-    filename = f"{str(uuid.uuid7())}-{str(uuid.uuid7())}-{time.time()}"
+    filename = f"{str(uuid.uuid7())}-{str(uuid.uuid7())}-{int(time.time())}"
     zip_folder("./", f"{commitf.resolve()}/{filename}.zip")
     zipfile = commitf / f"{filename}.zip"
 
-    sha512 = sha512_file(f"./.svcs/commits/{ym}/{filename}.zip")
+    sha512 = sha512_file(f"./.svcs/commits/{ym}/{day}/{filename}.zip")
     filename = filename + f"-{sha512}"
 
-    clist[f"{filename.split("-")[0]}-{filename.split("-")[1]}-{time.time()}"] = {
+    clist[f"{filename.split("-")[0]}-{filename.split("-")[1]}-{int(time.time())}-{filename.split("-")[2]}-{filename.split("-")[3]}"] = {
         "filename": filename,
         "sha512": sha512,
         "msg": args.commit,
         "stamp": time.time(),
-        "ym": ym
+        "ym": ym,
+        "day": day
     }
     commitlist.write_text(json.dumps(clist, indent=4))
 
@@ -128,7 +132,7 @@ if args.commit:
 
     zipfile.unlink(missing_ok=True)
 
-    print(f"Done. commit {args.commit} ({filename.split("-")[0]}-{filename.split("-")[1]}) @ {ym}")
+    print(f"Done. commit {args.commit} ({filename.split("-")[0]}-{filename.split("-")[1]}) on {ym}-{day} @ {timestamp}")
 elif args.list:
     for uid, (dat) in clist.items():
-        print(f"{uid}:{dat["msg"]}:{dat["ym"]} | Timestamp: {dat["stamp"]}")
+        print(f"{uid}: '{dat["msg"]}' : {dat["ym"]} on {dat["day"]} | Timestamp: {dat["stamp"]}")
