@@ -55,16 +55,24 @@ jobs:
       - name: Build executable
         run: pyinstaller --onefile --name svcs --paths svcs svcs/main.py
 
-      - name: Smoke test executable
+      - name: Smoke test executable on Unix
+        if: runner.os != 'Windows'
         shell: bash
         run: |
-          ext=""
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            ext=".exe"
-          fi
+          test -f dist/svcs
+          chmod 755 dist/svcs
+          test -x dist/svcs
+          ./dist/svcs --help
 
-          chmod +x "dist/svcs${ext}" || true
-          "dist/svcs${ext}" --help
+      - name: Smoke test executable on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (-not (Test-Path -Path "dist\svcs.exe" -PathType Leaf)) {
+            throw "dist\svcs.exe was not created"
+          }
+
+          & ".\dist\svcs.exe" --help
 
       - name: Prepare release asset
         id: asset
