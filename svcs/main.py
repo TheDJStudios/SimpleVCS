@@ -71,6 +71,9 @@ if len(commitlist.read_text()) < 2:
 
 clist = json.loads(commitlist.read_text())
 
+
+
+
 cmagic = b"SVCS"
 version = 1
 cstruct = struct.Struct("<32sIx")
@@ -81,13 +84,17 @@ parser = argparse.ArgumentParser(description="SimpleVCS CLI")
 commit = Commit()
 tracking = Tracking()
 
+if len(core.read_bytes()) < cstruct.size:
+    print("It doesnt look like theres a repository here. if there is its file is corrupted.\n Please enter a name below to create / repair this repository")
+    reponame = input("SimpleVCS | New repo > ")
+    core.write_bytes(cstruct.pack(str(reponame).encode(), version))
+
 if len(core.read_bytes()) >= cstruct.size:
     repoexists = True
 else:
     repoexists = False
 
 parser.add_argument("--commit", type=str)
-parser.add_argument("--init",type=str)
 parser.add_argument("--list", "-l", action="store_true")
 
 args = parser.parse_args()
@@ -122,11 +129,6 @@ if args.commit:
     zipfile.unlink(missing_ok=True)
 
     print(f"Done. commit {args.commit} ({filename.split("-")[0]}-{filename.split("-")[1]}) @ {ym}")
-elif args.init:
-    if len(core.read_bytes()) < cstruct.size:
-        core.write_bytes(cstruct.pack(str(args.init).encode(), version))
-    else:
-        print(f"unable to initialize repository {args.init}")
 elif args.list:
     for uid, (dat) in clist.items():
         print(f"{uid}:{dat["msg"]}:{dat["ym"]} | Timestamp: {dat["stamp"]}")
