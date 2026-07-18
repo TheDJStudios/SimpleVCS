@@ -22,15 +22,18 @@ permissions:
 
 jobs:
   build:
-    name: Build ${{ matrix.os }}
+    name: Build ${{ matrix.platform }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - ubuntu-latest
-          - macos-latest
-          - windows-latest
+        include:
+          - platform: linux-x64-glibc
+            os: ubuntu-22.04
+          - platform: macos
+            os: macos-latest
+          - platform: windows
+            os: windows-latest
 
     steps:
       - name: Check out repository
@@ -52,21 +55,54 @@ jobs:
       - name: Build executable
         run: pyinstaller --onefile --name svcs --paths svcs svcs/main.py
 
+      - name: Smoke test executable
+        shell: bash
+        run: |
+          ext=""
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            ext=".exe"
+          fi
+
+          chmod +x "dist/svcs${ext}" || true
+          "dist/svcs${ext}" --help
+
       - name: Prepare release asset
         id: asset
         shell: bash
         run: |
-          mkdir -p release
+          mkdir -p package/svcs release
 
           ext=""
           if [ "$RUNNER_OS" = "Windows" ]; then
             ext=".exe"
           fi
 
-          platform="$(printf "%s-%s" "$RUNNER_OS" "$RUNNER_ARCH" | tr "[:upper:]" "[:lower:]")"
-          asset_name="svcs-${platform}${ext}"
+          arch="$(printf "%s" "$RUNNER_ARCH" | tr "[:upper:]" "[:lower:]")"
 
-          cp "dist/svcs${ext}" "release/${asset_name}"
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            platform="linux-${arch}-glibc"
+            asset_name="svcs-${platform}.tar.gz"
+          elif [ "$RUNNER_OS" = "macOS" ]; then
+            platform="macos-${arch}"
+            asset_name="svcs-${platform}.tar.gz"
+          else
+            platform="windows-${arch}"
+            asset_name="svcs-${platform}.zip"
+          fi
+
+          cp "dist/svcs${ext}" "package/svcs/svcs${ext}"
+
+          if [ "$RUNNER_OS" != "Windows" ]; then
+            chmod 755 "package/svcs/svcs"
+            tar -C package -czf "release/${asset_name}" svcs
+          else
+            cd package
+            python -m zipfile -c "../release/${asset_name}" "svcs/svcs.exe"
+            cd ..
+          fi
+
+          python -c "from pathlib import Path; import hashlib; p = Path('release/${asset_name}'); Path(str(p) + '.sha512').write_text(hashlib.sha512(p.read_bytes()).hexdigest() + '  ' + p.name + '\n')"
+
           echo "asset_name=${asset_name}" >> "$GITHUB_OUTPUT"
 
       - name: Upload build artifact
@@ -114,11 +150,22 @@ jobs:
           PRERELEASE: ${{ steps.release.outputs.prerelease }}
         shell: bash
         run: |
+          cat > release-notes.md <<NOTES
+          Automated ${{ inputs.channel }} build from ${GITHUB_SHA}.
+
+          Assets:
+          - svcs-linux-x64-glibc.tar.gz: Linux x86_64 glibc build for Debian/Ubuntu, Fedora, Arch, and similar glibc distributions.
+          - svcs-macos-*.tar.gz: macOS build for the GitHub runner architecture.
+          - svcs-windows-*.zip: Windows build containing svcs.exe.
+
+          The .tar.gz files preserve Unix executable permissions. The .sha512 files contain SHA-512 checksums.
+          NOTES
+
           args=(
             "$RELEASE_TAG"
             release-assets/*
             --title "SVCS ${RELEASE_TAG}"
-            --notes "Automated ${{ inputs.channel }} build from ${GITHUB_SHA}."
+            --notes-file release-notes.md
             --target "$GITHUB_SHA"
           )
 
