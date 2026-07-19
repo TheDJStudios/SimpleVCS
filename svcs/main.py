@@ -1,5 +1,5 @@
 #!./.venv/bin/python
-import argparse, uuid,struct,json,time, hashlib, shutil,tempfile,
+import argparse, uuid,struct,json,time, hashlib, shutil,tempfile
 from pathlib import Path
 from tracking import Tracking
 from commit import Commit
