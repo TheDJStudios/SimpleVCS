@@ -1,5 +1,5 @@
 #!./.venv/bin/python
-import argparse, uuid,struct,json,time, hashlib
+import argparse, uuid,struct,json,time, hashlib, shutil,tempfile,
 from pathlib import Path
 from tracking import Tracking
 from commit import Commit
@@ -72,6 +72,41 @@ if len(commitlist.read_text()) < 2:
 
 clist = json.loads(commitlist.read_text())
 
+def restore_snapshot(zip_path, repo_path="."):
+    repo = Path(repo_path).resolve()
+    zip_path = Path(zip_path).resolve()
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp = Path(temp_dir)
+
+        with ZipFile(zip_path, "r") as zipf:
+            for member in zipf.infolist():
+                member_path = Path(member.filename)
+
+                # Prevent zip-slip attacks like ../../somefile
+                if member_path.is_absolute() or ".." in member_path.parts:
+                    raise ValueError(f"Unsafe zip path: {member.filename}")
+
+                zipf.extract(member, temp)
+
+        # Delete current repo contents except .svcs
+        for path in repo.iterdir():
+            if path.name == ".svcs":
+                continue
+
+            if path.is_dir():
+                shutil.rmtree(path)
+            else:
+                path.unlink()
+
+        # Copy extracted contents into repo
+        for path in temp.iterdir():
+            destination = repo / path.name
+
+            if path.is_dir():
+                shutil.copytree(path, destination)
+            else:
+                shutil.copy2(path, destination)
 
 
 
@@ -97,6 +132,7 @@ else:
 
 parser.add_argument("--commit", type=str)
 parser.add_argument("--list", "-l", action="store_true")
+parser.add_argument("--restore", action="store_true")
 
 args = parser.parse_args()
 
@@ -136,3 +172,21 @@ if args.commit:
 elif args.list:
     for uid, (dat) in clist.items():
         print(f"{uid}: '{dat["msg"]}' : {dat["ym"]} on {dat["day"]} | Timestamp: {dat["stamp"]}")
+elif args.restore:
+    for num, uid in enumerate(clist):
+        dat = clist[uid]
+        print(f"[{num}] {uid}: '{dat["msg"]}' : {dat["ym"]} on {dat["day"]} | Timestamp: {dat["stamp"]}")
+    print("Please select a option or type 'exit' to exit. Any uncommited changes will be lost.\n the above goes from Old -> New")
+    answer = input("Warning > ")
+    if answer.lower() == "exit":
+        exit("User exit")
+    else:
+        print("Are you sure? All uncommited changes will be lost (y/n)")
+        ans = input("Confirm Y/N > ")
+        if ans.lower() == "y":
+            for num, uid in enumerate(clist):
+                dat = clist[uid]
+                if num == int(answer):
+                    restore_snapshot(f"{commitsfolder.resolve()}/{dat["ym"]}/{dat["day"]}/{dat["filename"]}.zip")
+                else:
+                    continue
