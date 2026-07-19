@@ -142,7 +142,7 @@ if args.commit:
     commitf = commitsfolder / f"{ym}/{day}"
 
     if not commitf.exists():
-        commitf.mkdir()
+        commitf.mkdir(parents=True)
 
     filename = f"{str(uuid.uuid7())}-{str(uuid.uuid7())}-{int(time.time())}"
     zip_folder("./", f"{commitf.resolve()}/{filename}.zip")
